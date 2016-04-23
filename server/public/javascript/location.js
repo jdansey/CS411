@@ -1,13 +1,14 @@
-var myApp = angular.module('myApp', []);
+var myApp = angular.module('myApp', ['ngCookies']);
 
 myApp.controller('ctrl', function($scope) {
 $scope.foo = 'foo';
 });
 
+var username;
+myApp.controller('geoCtrl', function($scope,$http,$cookies) {
 
-myApp.controller('geoCtrl', function($scope,$http) {
-
-    //console.log("inside geolocate controller");
+    username = $cookies.get("username");
+    document.getElementById("user").innerHTML = username + "<span class=\"caret\"></span>"
 
     /*
         Initialize map when open page
@@ -345,8 +346,12 @@ myApp.controller('geoCtrl', function($scope,$http) {
                 lat: queries[index].lat,
                 lng: queries[index].lon,
                 title: queries[index].title,
-                pageid: queries[index].pageid
+                pageid: queries[index].pageid,
+                id: ""
             }
+
+            // save marker to the markers db
+            //var id = $scope.save(marker);
 
             markers[index] = marker
             var coordinate = {lat: queries[index].lat, lng: queries[index].lng};
@@ -368,9 +373,12 @@ myApp.controller('geoCtrl', function($scope,$http) {
 
                 var position = e.latLng;
                 var title = markers[index].title;
+                var pageid = markers[index].pageid;
+                var id = markers[index].id;
 
                 // Need to work on this
-                var content = '<a href="/result/' + pageid + '" target="_blank">' + title + '</a>';
+                var content = '<a href="/result/wiki/' + pageid + '" target="_blank">' + title + '</a>' +
+                    '<p>' + pageid + '  ' + id + '</p>';
 
                 infowindow.setContent(content);
                 infowindow.setPosition(position);
@@ -383,6 +391,7 @@ myApp.controller('geoCtrl', function($scope,$http) {
         }
     };
 
+    // send user to addMarker page
     $scope.addMarkerPage = function() {
         var url = '/addmarker/' +
                 $scope.latitude +
@@ -392,4 +401,114 @@ myApp.controller('geoCtrl', function($scope,$http) {
         window.open(url);
     };
 
+    // display user generated markers on the map
+    // NOT Doing query, will do that later
+    $scope.showMarkers = function() {
+        var map = $scope.refreshMap();
+
+        $http({
+            method: 'GET',
+            url: '/markers/db/user/'
+        }).then(function successCallback(response) {
+            console.log(response.data);
+            $scope.putUserMarker(response.data);
+        }, function errorCallback(response) {
+            console.log("get markers from db fail");
+        });
+    };
+
+    $scope.putUserMarker = function(queries) {
+
+        //console.log("inside putMarker");
+
+        var map = $scope.refreshMap();
+        var markers = [];
+        var infowindow = new google.maps.InfoWindow({
+        });
+        var labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        var labelIndex = 0;
+
+        for (index in queries) {
+
+            var marker = {
+                lat: queries[index].latitude,
+                lng: queries[index].longitude,
+                title: queries[index].title,
+                description: queries[index].description
+            }
+
+            markers[index] = marker;
+            var coordinate = {lat: queries[index].latitude, lng: queries[index].longitude};
+
+            markers[index]["map"] = new google.maps.Marker({
+                position: {lat: markers[index].lat, lng: markers[index].lng},
+                map: map,
+                //animation: google.maps.Animation.DROP,
+                title: markers[index].title,
+                label: labels[labelIndex++ % labels.length]
+            });
+        }
+
+        // onclick, show wiki Info
+        function addClick(index) {
+            markers[index]["map"].addListener('click', function(e) {
+
+                var position = e.latLng;
+                var title = markers[index].title;
+                var description = markers[index].title;
+
+                // Need to work on this
+                //var content = '<a href="/result/' + pageid + '" target="_blank">' + title + '</a>';
+                var content = '<h4>' + title + '</h4>' +
+                              '<p>' + description + '</p>';
+
+                infowindow.setContent(content);
+                infowindow.setPosition(position);
+                infowindow.open(map);
+            });
+        }
+
+        for (index in markers) {
+            addClick(index);
+        }
+    };
+
+    $scope.save = function(marker) {
+
+        // NEED TO DO INPUT VALIDATION
+
+        var lat = marker.lat;
+        var lng = marker.lng;
+
+        var title = marker.title;
+        var type = "wiki";
+        var description = "";
+        var pageid = marker.pageid;
+
+        var req = {
+            method: 'POST',
+            url: '/markers/db',
+            data:{
+                username: "test",
+                title: title,
+                description: description,
+                type: type,
+                votes: 0,
+                latitude: lat,
+                longitude: lng,
+                pageid: pageid
+            }
+        };
+
+        var id = "";
+        $http(req)
+            .then(function successCallback(response) {
+                id = response.data;
+                console.log("save marker %s to database successfully", title)
+            }, function errorCallback(response) {
+                console.log("save marker %s to database fail", title)
+            });
+
+        
+    }
 });
